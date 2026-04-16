@@ -38,6 +38,11 @@ class Queries(object):
         :param generated_query: string query to be sent to the API
         :return: decoded GraphQL JSON output
         """
+        if not self.access_token:
+            raise RuntimeError(
+                "ACCESS_TOKEN is empty. Set a personal access token "
+                "in repo secrets (Settings -> Secrets and variables -> Actions)."
+            )
         headers = {
             "Authorization": f"Bearer {self.access_token}",
         }
@@ -51,8 +56,8 @@ class Queries(object):
             result = await r_async.json()
             if result is not None:
                 return result
-        except:
-            print("aiohttp failed for GraphQL query")
+        except Exception as e:
+            print(f"aiohttp failed for GraphQL query: {type(e).__name__}: {e}")
             # Fall back on non-async requests
             async with self.semaphore:
                 r_requests = requests.post(
@@ -60,6 +65,16 @@ class Queries(object):
                     headers=headers,
                     json={"query": generated_query},
                 )
+                if r_requests.status_code != 200:
+                    print(
+                        f"GraphQL request failed: HTTP {r_requests.status_code} "
+                        f"(body: {r_requests.text[:500]!r})"
+                    )
+                    raise RuntimeError(
+                        f"GitHub GraphQL API returned HTTP {r_requests.status_code}. "
+                        "If 401, the ACCESS_TOKEN is invalid or expired — "
+                        "rotate the PAT in repo secrets."
+                    )
                 result = r_requests.json()
                 if result is not None:
                     return result
